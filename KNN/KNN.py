@@ -1,9 +1,10 @@
-import csv
 from collections import Counter
 from operator import itemgetter
-from typing import List
+from typing import Iterable, List
 
 import numpy as np
+
+from .helpers import normalize_data
 
 
 class KNNModel:
@@ -22,55 +23,44 @@ class KNNModel:
         Loads a .csv file into memory to train a KNN model on it
 
     predict(test_data: np.ndarray, k: int)
-        Given a test data point and k neighbors, predict its outcome
+        Given a list of test data and k neighbors, predict an outcome for each given
+        data point
     """
 
     def __init__(self, minkowski_p: int = 2):
         self.minkoswki_p = minkowski_p
-        self.features: List[List] = []
-        self.outcomes: List[int] = []
+        self.features = None
+        self.outcomes = None
 
-    def load_data(self, filename: str):
-        with open(filename, "r") as data_file:
-            reader = csv.DictReader(data_file)
-            for row in reader:
-                values = list(row.values())
-                self.features.append(
-                    np.array([float(i) for i in values[:-1]], dtype=np.float)
-                )
-                self.outcomes.append(int(values[-1]))
-            self._normalize_data()
-
-    def _normalize_data(self):
-        max_element = 0
-        min_element = np.inf
-        for feat_row in self.features:
-            if (max_row := np.max(feat_row)) > max_element:
-                max_element = max_row
-            if (min_row := np.min(feat_row)) < min_element:
-                min_element = min_row
-        for idx, feat_row in enumerate(self.features):
-            self.features[idx] = np.divide(
-                feat_row - min_element, max_element - min_element
-            )
-
-    @staticmethod
-    def _normalize_test_data_point(test_data_point):
-        max_element = np.max(test_data_point)
-        min_element = np.min(test_data_point)
-        val = np.divide(test_data_point - min_element, max_element - min_element)
-        return val
+    def load_train_data(self, data_iter: Iterable[List[str]]):
+        n_rows = len(data_iter)
+        n_columns = len(data_iter[0])
+        self.features = np.empty((n_rows, n_columns - 1))
+        self.outcomes = np.empty((n_rows, 1), dtype=np.dtype("u1"))
+        for idx, row in enumerate(data_iter):
+            self.features[idx][:-1] = np.array([float(val) for val in row[:-1]])
+            self.outcomes[idx] = int(row[-1])
+        self.features = normalize_data(self.features)
 
     def _calculate_distance(self, this, other) -> float:
         return np.sum((this - other) ** self.minkoswki_p) ** (1 / self.minkoswki_p)
 
-    def predict(self, test_data: List[float], k: int = 1):
-        test_data = KNNModel()._normalize_test_data_point(test_data)
-        distances = [
-            (idx, self._calculate_distance(data_point, test_data))
-            for idx, data_point in enumerate(self.features)
-        ]
-        distances.sort(key=itemgetter(1))
-        k_outcomes = [self.outcomes[idx] for idx, _ in distances[:k]]
-        outcome_counts = Counter(k_outcomes)
-        return max(outcome_counts, key=outcome_counts.get)
+    def predict(self, test_data: Iterable[List[str]], k: int = 1):
+        n_rows = len(test_data)
+        n_columns = len(test_data[0])
+        test_matrix = np.empty((n_rows, n_columns))
+        for idx, row in enumerate(test_data):
+            test_matrix[idx][:-1] = np.array([float(val) for val in row[:-1]])
+        test_matrix = normalize_data(test_matrix)
+        # Pre-allocate memory for outcomes list
+        outcomes: List[int] = [0 for _ in range(len(self.features))]
+        for idx, test_row in enumerate(test_matrix):
+            distances = [
+                (idx, self._calculate_distance(data_point, test_row))
+                for idx, data_point in enumerate(self.features)
+            ]
+            distances.sort(key=itemgetter(1))
+            k_outcomes = [self.outcomes[idx] for idx, _ in distances[:k]]
+            outcome_counts = Counter(k_outcomes)
+            outcomes[idx] = max(outcome_counts, key=outcome_counts.get)
+        return outcomes

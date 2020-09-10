@@ -1,7 +1,12 @@
 import random
 from collections import defaultdict
 from fractions import Fraction
+from itertools import chain
 from typing import List
+
+import numpy as np
+
+from KNN.KNN import KNNModel
 
 
 class KFoldCrossValidation:
@@ -44,6 +49,8 @@ class KFoldCrossValidation:
             klass_proportions[klass] = proportion
             random.shuffle(self.klass_idxes[klass])
         for _ in range(fold_size):
+            # Choose a random class using the class proportions as weights for the
+            # random draw
             chosen_klass = random.choices(
                 list(klass_proportions.keys()),
                 weights=list(klass_proportions.values()),
@@ -65,19 +72,46 @@ class KFoldCrossValidation:
         return fold
 
     def kfold_cross_validation(self):
-        folds = []
-        for _ in range(self.k):
-            folds.append(self.generate_stratified_fold())
-        remaining = []
-        for klass in self.klass_idxes:
-            if len(self.klass_idxes[klass]) > 0:
-                remaining.extend(self.klass_idxes[klass])
-        folds[-1].extend(remaining)
-        test_fold_idx = random.randint(0, self.k - 1)
-        test_fold = folds[test_fold_idx]
+        with open(self.filename, "rb") as dataset:
+            folds = []
+            for _ in range(self.k):
+                fold_rows = []
+                for idx in self.generate_stratified_fold():
+                    dataset.seek(self._line_offsets[idx])
+                    fold_rows.append(dataset.readline().decode("utf-8").strip())
+                folds.append(fold_rows)
+
+            remaining_idxs = []
+            for klass in self.klass_idxes:
+                if len(idxes := self.klass_idxes[klass]) > 0:
+                    remaining_idxs.extend(idxes)
+            remaining_data = []
+            for idx in remaining_idxs:
+                dataset.seek(self._line_offsets[idx])
+                remaining_data.append(dataset.readline().decode("utf-8").strip())
+            folds[-1].extend(remaining_data)
+
+            accuracies = []
+            fold_idxes = list(range(len(folds)))
+            random.shuffle(fold_idxes)
+            for _ in range(self.k):
+                test_fold_idx = fold_idxes.pop()
+
+                test_outcomes = np.array([int(t[-1]) for t in folds[test_fold_idx]])
+                knn_model = KNNModel(minkowski_p=2, k_neighbors=6)
+                train_folds = list(
+                    chain(*(folds[:test_fold_idx] + folds[test_fold_idx + 1 :]))
+                )
+                knn_model.load_train_data(train_folds)
+                predictions = knn_model.predict(folds[test_fold_idx])
+
+                accuracies.append(np.mean(test_outcomes == predictions))
+
+            print(np.mean(accuracies))
+            print(np.std(accuracies))
 
 
 if __name__ == "__main__":
-    kfold = KFoldCrossValidation("datasets/diabetes.csv", k=5)
+    kfold = KFoldCrossValidation("datasets/diabetes.csv", k=10)
     kfold.index_dataset()
     kfold.kfold_cross_validation()

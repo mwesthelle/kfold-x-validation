@@ -27,40 +27,46 @@ class KNNModel:
         data point
     """
 
-    def __init__(self, minkowski_p: int = 2):
+    def __init__(self, minkowski_p: int = 2, k_neighbors: int = 3):
         self.minkoswki_p = minkowski_p
         self.features = None
         self.outcomes = None
+        self.k_neighbors = k_neighbors
 
     def load_train_data(self, data_iter: Iterable[List[str]]):
         n_rows = len(data_iter)
-        n_columns = len(data_iter[0])
+        n_columns = len(data_iter[0].split(","))
         self.features = np.empty((n_rows, n_columns - 1))
-        self.outcomes = np.empty((n_rows, 1), dtype=np.dtype("u1"))
+        self.outcomes = np.empty((n_rows), dtype=np.dtype("u1"))
         for idx, row in enumerate(data_iter):
-            self.features[idx][:-1] = np.array([float(val) for val in row[:-1]])
-            self.outcomes[idx] = int(row[-1])
+            values = row.split(",")
+            self.features[idx] = np.array([float(val) for val in values[:-1]])
+            self.outcomes[idx] = int(values[-1])
         self.features = normalize_data(self.features)
 
     def _calculate_distance(self, this, other) -> float:
         return np.sum((this - other) ** self.minkoswki_p) ** (1 / self.minkoswki_p)
 
-    def predict(self, test_data: Iterable[List[str]], k: int = 1):
+    def predict(self, test_data: Iterable[List[str]]):
         n_rows = len(test_data)
-        n_columns = len(test_data[0])
-        test_matrix = np.empty((n_rows, n_columns))
+        n_columns = len(test_data[0].split(","))
+        test_matrix = np.empty((n_rows, n_columns - 1))
         for idx, row in enumerate(test_data):
-            test_matrix[idx][:-1] = np.array([float(val) for val in row[:-1]])
+            values = row.split(",")
+            test_matrix[idx] = np.array([float(val) for val in values[:-1]])
         test_matrix = normalize_data(test_matrix)
         # Pre-allocate memory for outcomes list
-        outcomes: List[int] = [0 for _ in range(len(self.features))]
+        predictions = np.empty(len(test_data))
         for idx, test_row in enumerate(test_matrix):
             distances = [
                 (idx, self._calculate_distance(data_point, test_row))
                 for idx, data_point in enumerate(self.features)
             ]
             distances.sort(key=itemgetter(1))
-            k_outcomes = [self.outcomes[idx] for idx, _ in distances[:k]]
+            assert all([type(v) == tuple for v in distances])
+            k_outcomes = [
+                self.outcomes[idx] for idx, _ in distances[: self.k_neighbors]
+            ]
             outcome_counts = Counter(k_outcomes)
-            outcomes[idx] = max(outcome_counts, key=outcome_counts.get)
-        return outcomes
+            predictions[idx] = max(outcome_counts, key=outcome_counts.get)
+        return predictions

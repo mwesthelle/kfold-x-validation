@@ -4,16 +4,18 @@ from fractions import Fraction
 from itertools import chain
 from typing import List
 
-import numpy as np
-
 from KNN.KNN import KNNModel
+
+from Metrics.Metrics import f_measure, precision
+
+import numpy as np
 
 
 class KFoldCrossValidation:
-    def __init__(self, filename: str, k: int = 10, repeated=False):
+    def __init__(self, filename: str, k: int = 10, r: int = 1):
         self.filename = filename
         self.k = k
-        self.repeated = repeated
+        self.r = r
         self.klass_idxes = defaultdict(
             list
         )  # Holds classes as keys and indices they occur on as values
@@ -25,7 +27,9 @@ class KFoldCrossValidation:
         of offsets for fast access.
         """
         offset: int = 0
+        self._line_offsets.clear()
         with open(self.filename, "rb") as dataset:
+            dataset.seek(0)
             offset += len(next(dataset))  # skip header and set offset
             for idx, row in enumerate(dataset):
                 self._line_offsets.append(offset)
@@ -33,7 +37,7 @@ class KFoldCrossValidation:
                 values = row.decode("utf-8").strip().split(",")
                 self.klass_idxes[values[-1]].append(idx)
 
-    def generate_stratified_fold(self) -> List[int]:
+    def generate_stratified_fold(self, seed: int = 1) -> List[int]:
         """
         Generate a stratified fold by sampling our index map without repetition. The
         fold is represented by a list of indices.
@@ -73,45 +77,63 @@ class KFoldCrossValidation:
 
     def kfold_cross_validation(self):
         with open(self.filename, "rb") as dataset:
-            folds = []
-            for _ in range(self.k):
-                fold_rows = []
-                for idx in self.generate_stratified_fold():
+            repeated_precisions_mean = []
+            repeated_precisions_std = []
+            repeated_f1_mean = []
+            repeated_f1_std = []
+            for i in range(self.r):
+                random.seed(i * 3)
+                self.index_dataset()
+                folds = []
+                for _ in range(self.k):
+                    fold_rows = []
+                    for idx in self.generate_stratified_fold():
+                        dataset.seek(self._line_offsets[idx])
+                        fold_rows.append(dataset.readline().decode("utf-8").strip())
+                    folds.append(fold_rows)
+
+                remaining_idxs = []
+                for klass in self.klass_idxes:
+                    if len(idxes := self.klass_idxes[klass]) > 0:
+                        remaining_idxs.extend(idxes)
+                self.klass_idxes.clear()
+                remaining_data = []
+                for idx in remaining_idxs:
                     dataset.seek(self._line_offsets[idx])
-                    fold_rows.append(dataset.readline().decode("utf-8").strip())
-                folds.append(fold_rows)
+                    remaining_data.append(dataset.readline().decode("utf-8").strip())
+                folds[-1].extend(remaining_data)
 
-            remaining_idxs = []
-            for klass in self.klass_idxes:
-                if len(idxes := self.klass_idxes[klass]) > 0:
-                    remaining_idxs.extend(idxes)
-            remaining_data = []
-            for idx in remaining_idxs:
-                dataset.seek(self._line_offsets[idx])
-                remaining_data.append(dataset.readline().decode("utf-8").strip())
-            folds[-1].extend(remaining_data)
+                precisions = []
+                f1_scores = []
+                fold_idxes = list(range(len(folds)))
+                random.shuffle(fold_idxes)
+                for _ in range(self.k):
+                    test_fold_idx = fold_idxes.pop()
 
-            accuracies = []
-            fold_idxes = list(range(len(folds)))
-            random.shuffle(fold_idxes)
-            for _ in range(self.k):
-                test_fold_idx = fold_idxes.pop()
+                    test_outcomes = np.array([int(t[-1]) for t in folds[test_fold_idx]])
+                    knn_model = KNNModel(minkowski_p=2, k_neighbors=6)
+                    train_folds = list(
+                        chain(*(folds[:test_fold_idx] + folds[test_fold_idx + 1 :]))
+                    )
+                    knn_model.load_train_data(train_folds)
+                    predictions = knn_model.predict(folds[test_fold_idx])
 
-                test_outcomes = np.array([int(t[-1]) for t in folds[test_fold_idx]])
-                knn_model = KNNModel(minkowski_p=2, k_neighbors=6)
-                train_folds = list(
-                    chain(*(folds[:test_fold_idx] + folds[test_fold_idx + 1 :]))
-                )
-                knn_model.load_train_data(train_folds)
-                predictions = knn_model.predict(folds[test_fold_idx])
+                    precisions.append(precision(predictions, test_outcomes))
+                    f1_scores.append(f_measure(predictions, test_outcomes))
 
-                accuracies.append(np.mean(test_outcomes == predictions))
+                repeated_precisions_mean.append(np.mean(precisions))
+                repeated_precisions_std.append(np.std(precisions))
+                repeated_f1_mean.append(np.mean(f1_scores))
+                repeated_f1_std.append(np.std(f1_scores))
 
-            print(np.mean(accuracies))
-            print(np.std(accuracies))
+            print(f"Precision mean: {np.mean(repeated_precisions_mean):.2f}")
+            print(
+                f"Precision standard deviation: {np.std(repeated_precisions_mean):.2f}"
+            )
+            print(f"f1 mean: {np.mean(repeated_f1_mean):.2f}")
+            print(f"f1 standard deviation: {np.std(repeated_f1_mean):.2f}")
 
 
 if __name__ == "__main__":
-    kfold = KFoldCrossValidation("datasets/diabetes.csv", k=10)
-    kfold.index_dataset()
+    kfold = KFoldCrossValidation("datasets/diabetes.csv", k=10, r=3)
     kfold.kfold_cross_validation()

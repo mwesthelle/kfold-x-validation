@@ -30,18 +30,17 @@ class KNNModel:
     def __init__(self, minkowski_p: int = 2, k_neighbors: int = 3):
         self.minkoswki_p = minkowski_p
         self.features = None
-        self.outcomes = None
+        self.outcomes = []
         self.k_neighbors = k_neighbors
 
     def load_train_data(self, data_iter: Iterable[List[str]]):
         n_rows = len(data_iter)
         n_columns = len(data_iter[0].split(","))
         self.features = np.empty((n_rows, n_columns - 1))
-        self.outcomes = np.empty((n_rows), dtype=np.dtype("u1"))
         for idx, row in enumerate(data_iter):
             values = row.split(",")
             self.features[idx] = np.array([float(val) for val in values[:-1]])
-            self.outcomes[idx] = int(values[-1])
+            self.outcomes.append(values[-1])
         self.features = normalize_data(self.features)
 
     def _calculate_distance(self, this, other) -> float:
@@ -63,7 +62,6 @@ class KNNModel:
                 for idx, data_point in enumerate(self.features)
             ]
             distances.sort(key=itemgetter(1))
-            assert all([type(v) == tuple for v in distances])
             k_outcomes = [
                 self.outcomes[idx] for idx, _ in distances[: self.k_neighbors]
             ]

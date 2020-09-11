@@ -4,7 +4,7 @@ from typing import Iterable, List
 
 import numpy as np
 
-from .helpers import normalize_data
+from helpers import normalize_data
 
 
 class KNNModel:

@@ -4,22 +4,31 @@ from fractions import Fraction
 from itertools import chain
 from typing import List
 
-from KNN.KNN import KNNModel
+from KNN import KNNModel
 
-from Metrics.Metrics import f_measure, precision
+from Metrics import f_measure, precision
 
 import numpy as np
 
 
 class KFoldCrossValidation:
-    def __init__(self, filename: str, k: int = 10, r: int = 1):
+    def __init__(
+        self,
+        filename: str,
+        k_folds: int = 10,
+        r: int = 1,
+        k_nearest_neighbors: int = 3,
+        minkowski_p: int = 2,
+    ):
         self.filename = filename
-        self.k = k
+        self.k_folds = k_folds
         self.r = r
         self.klass_idxes = defaultdict(
             list
         )  # Holds classes as keys and indices they occur on as values
         self._line_offsets = []
+        self.k_nearest_neighbors = k_nearest_neighbors
+        self.minkowski_p = minkowski_p
 
     def index_dataset(self):
         """
@@ -43,7 +52,7 @@ class KFoldCrossValidation:
         fold is represented by a list of indices.
         """
         klass_proportions = {}
-        fold_size = len(self._line_offsets) // self.k
+        fold_size = len(self._line_offsets) // self.k_folds
         fold = []
         for klass in self.klass_idxes:
             proportion = Fraction(
@@ -85,7 +94,7 @@ class KFoldCrossValidation:
                 random.seed(i * 3)
                 self.index_dataset()
                 folds = []
-                for _ in range(self.k):
+                for _ in range(self.k_folds):
                     fold_rows = []
                     for idx in self.generate_stratified_fold():
                         dataset.seek(self._line_offsets[idx])
@@ -107,11 +116,13 @@ class KFoldCrossValidation:
                 f1_scores = []
                 fold_idxes = list(range(len(folds)))
                 random.shuffle(fold_idxes)
-                for _ in range(self.k):
+                knn_model = KNNModel(
+                    minkowski_p=self.minkowski_p, k_neighbors=self.k_nearest_neighbors
+                )
+                for _ in range(self.k_folds):
                     test_fold_idx = fold_idxes.pop()
 
                     test_outcomes = np.array([int(t[-1]) for t in folds[test_fold_idx]])
-                    knn_model = KNNModel(minkowski_p=2, k_neighbors=6)
                     train_folds = list(
                         chain(*(folds[:test_fold_idx] + folds[test_fold_idx + 1 :]))
                     )
@@ -128,12 +139,7 @@ class KFoldCrossValidation:
 
             print(f"Precision mean: {np.mean(repeated_precisions_mean):.2f}")
             print(
-                f"Precision standard deviation: {np.std(repeated_precisions_mean):.2f}"
+                f"Precision standard deviation: {np.mean(repeated_precisions_std):.2f}"
             )
             print(f"f1 mean: {np.mean(repeated_f1_mean):.2f}")
-            print(f"f1 standard deviation: {np.std(repeated_f1_mean):.2f}")
-
-
-if __name__ == "__main__":
-    kfold = KFoldCrossValidation("datasets/diabetes.csv", k=10, r=3)
-    kfold.kfold_cross_validation()
+            print(f"f1 standard deviation: {np.mean(repeated_f1_std):.2f}")

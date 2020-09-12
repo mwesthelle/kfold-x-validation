@@ -2,9 +2,9 @@ from collections import Counter
 from operator import itemgetter
 from typing import Iterable, List
 
-import numpy as np
-
 from helpers import normalize_data
+
+import numpy as np
 
 
 class KNNModel:

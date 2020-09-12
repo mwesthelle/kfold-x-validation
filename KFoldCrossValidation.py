@@ -90,8 +90,10 @@ class KFoldCrossValidation:
             repeated_precisions_std = []
             repeated_f1_mean = []
             repeated_f1_std = []
-            for i in range(self.r):
-                random.seed(i * 3)
+            for i_repetition in range(self.r):
+                print(f"Repetition {i_repetition + 1}")
+                print("============")
+                random.seed(i_repetition * 3)
                 self.index_dataset()
                 folds = []
                 for _ in range(self.k_folds):
@@ -119,7 +121,7 @@ class KFoldCrossValidation:
                 knn_model = KNNModel(
                     minkowski_p=self.minkowski_p, k_neighbors=self.k_nearest_neighbors
                 )
-                for _ in range(self.k_folds):
+                for i_fold in range(self.k_folds):
                     test_fold_idx = fold_idxes.pop()
 
                     test_outcomes = np.array([int(t[-1]) for t in folds[test_fold_idx]])
@@ -129,14 +131,33 @@ class KFoldCrossValidation:
                     knn_model.load_train_data(train_folds)
                     predictions = knn_model.predict(folds[test_fold_idx])
 
-                    precisions.append(precision(predictions, test_outcomes))
-                    f1_scores.append(f_measure(predictions, test_outcomes))
+                    precisions.append(prec := precision(predictions, test_outcomes))
+                    f1_scores.append(f1 := f_measure(predictions, test_outcomes))
+                    print(f"Fold number {i_fold + 1}:")
+                    print(f"Precision: {prec:.2f}")
+                    print(f"F1-score: {f1:.2f}")
+                    print("----------")
 
-                repeated_precisions_mean.append(np.mean(precisions))
-                repeated_precisions_std.append(np.std(precisions))
-                repeated_f1_mean.append(np.mean(f1_scores))
-                repeated_f1_std.append(np.std(f1_scores))
+                print()
+                print("============")
+                repeated_precisions_mean.append(prec_mean := np.mean(precisions))
+                repeated_precisions_std.append(prec_std := np.std(precisions))
+                repeated_f1_mean.append(f1_mean := np.mean(f1_scores))
+                repeated_f1_std.append(f1_std := np.std(f1_scores))
+                print(
+                    f"Mean precision of repetition {i_repetition + 1}: {prec_mean:.2f}"
+                )
+                print(
+                    "Precision standard deviation of repetition "
+                    f"{i_repetition + 1}: {prec_std:.2f}"
+                )
+                print(f"Mean F1 score of repetition {i_repetition + 1}: {f1_mean:.2f}")
+                print(
+                    "F1 score standard deviation of repetition "
+                    f"{i_repetition + 1}: {f1_std:.2f}"
+                )
 
+            print("~~~~~~~~~~")
             print(f"Precision mean: {np.mean(repeated_precisions_mean):.2f}")
             print(
                 f"Precision standard deviation: {np.mean(repeated_precisions_std):.2f}"

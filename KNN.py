@@ -17,14 +17,22 @@ class KNNModel:
         Order of Minkowski distance (where 1 is Manhattan, 2 is Euclidean, and
         higher orders aren't special until Chebyshev's)
 
+    k_neighbors : int
+        Number of nearest neighbors that will vote on the new data points' classes
+
     Methods
     -------
-    load_data(filename: str)
-        Loads a .csv file into memory to train a KNN model on it
+    _calculate_distance(this : np.ndarray, other : np.ndarray)
+        Calculate Minkowski's generalized distance between this point and the other
+        point.
+
+    load_train_data(filename: str)
+        Populates a matrix of features/attributes and normalizes it according to
+        min/max values
 
     predict(test_data: np.ndarray, k: int)
-        Given a list of test data and k neighbors, predict an outcome for each given
-        data point
+        Given a list of test data rows and k nearest neighbors, predict an outcome for
+        each given data point
     """
 
     def __init__(self, minkowski_p: int = 2, k_neighbors: int = 3):
@@ -32,6 +40,9 @@ class KNNModel:
         self.features = None
         self.outcomes = []
         self.k_neighbors = k_neighbors
+
+    def _calculate_distance(self, this, other) -> float:
+        return np.sum((this - other) ** self.minkoswki_p) ** (1 / self.minkoswki_p)
 
     def load_train_data(self, data_iter: Iterable[List[str]]):
         n_rows = len(data_iter)
@@ -43,9 +54,6 @@ class KNNModel:
             self.outcomes.append(values[-1])
         self.features = normalize_data(self.features)
 
-    def _calculate_distance(self, this, other) -> float:
-        return np.sum((this - other) ** self.minkoswki_p) ** (1 / self.minkoswki_p)
-
     def predict(self, test_data: Iterable[List[str]]):
         n_rows = len(test_data)
         n_columns = len(test_data[0].split(","))
@@ -54,7 +62,7 @@ class KNNModel:
             values = row.split(",")
             test_matrix[idx] = np.array([float(val) for val in values[:-1]])
         test_matrix = normalize_data(test_matrix)
-        # Pre-allocate memory for outcomes list
+
         predictions = np.empty(len(test_data))
         for idx, test_row in enumerate(test_matrix):
             distances = [

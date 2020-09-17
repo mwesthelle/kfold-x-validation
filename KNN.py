@@ -6,8 +6,10 @@ from helpers import normalize_data
 
 import numpy as np
 
+from BaseModel import BaseModel
 
-class KNNModel:
+
+class KNNModel(BaseModel):
     """
     A K-Nearest Neighbors model
 

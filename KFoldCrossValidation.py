@@ -4,7 +4,7 @@ from fractions import Fraction
 from itertools import chain
 from typing import List
 
-from KNN import KNNModel
+from BaseModel import BaseModel
 
 from Metrics import f_measure, precision
 
@@ -35,13 +35,14 @@ class KFoldCrossValidation:
         ):
         Perform k-fold cross validation with `k_folds` and repeating it `repetitions`
         times on a KNN model with `nn` nearest neighbors using `minkowski_p` order of
-        Minkowski's distance generalization, reading the `filename` dataset 
+        Minkowski's distance generalization, reading the `filename` dataset
     """
 
-    def __init__(self):
+    def __init__(self, model: BaseModel):
         self.klass_idxes = defaultdict(
             list
         )  # Holds classes as keys and indices they occur on as values
+        self.model = model
         self._line_offsets = []
 
     def index_dataset(self, filename: str):
@@ -95,12 +96,7 @@ class KFoldCrossValidation:
         return fold
 
     def kfold_cross_validation(
-        self,
-        filename: str,
-        k_folds: int = 10,
-        repetitions: int = 1,
-        nn: int = 5,
-        minkowski_p: int = 2,
+        self, filename: str, k_folds: int = 10, repetitions: int = 1,
     ):
         results = []
         for i_repetition in range(repetitions):
@@ -130,7 +126,6 @@ class KFoldCrossValidation:
             f1_scores = []
             fold_idxes = list(range(len(folds)))
             random.shuffle(fold_idxes)
-            knn_model = KNNModel(minkowski_p=minkowski_p, k_neighbors=nn)
             all_folds_results = []
             for _ in range(k_folds):
                 test_fold_idx = fold_idxes.pop()
@@ -139,8 +134,8 @@ class KFoldCrossValidation:
                 train_folds = list(
                     chain(*(folds[:test_fold_idx] + folds[test_fold_idx + 1 :]))
                 )
-                knn_model.load_train_data(train_folds)
-                predictions = knn_model.predict(folds[test_fold_idx])
+                self.model.load_train_data(train_folds)
+                predictions = self.model.predict(folds[test_fold_idx])
 
                 precisions.append(precision(predictions, test_outcomes))
                 f1_scores.append(f_measure(predictions, test_outcomes))
